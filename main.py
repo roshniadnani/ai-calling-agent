@@ -1,35 +1,44 @@
-import os
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+import os
 from dotenv import load_dotenv
-from vonage_call import initiate_call
+from call_vonage import make_call
+from gpt_elevenlabs import generate_gpt_reply, generate_voice
 
 load_dotenv()
 
 app = FastAPI()
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/")
-def read_root():
-    return {"status": "Vonage AI Calling Agent is live!"}
+def root():
+    return {"message": "AI Calling Agent is running."}
 
-@app.post("/webhook/answer")
+@app.get("/make-call/{to_number}")
+def call_user(to_number: str):
+    make_call(to_number)
+    return {"status": "Call initiated to", "number": to_number}
+
+@app.post("/webhooks/answer")
 async def answer_call(request: Request):
-    return {
-        "actions": [
-            {
-                "action": "talk",
-                "voiceName": "Amy",
-                "text": "Hello! This is your Vonage AI calling agent. Thank you for answering the call."
-            }
-        ]
-    }
+    prompt = "Hello, this is Desiree, your AI insurance agent. Let's begin your quick insurance survey."
+    gpt_response = generate_gpt_reply(prompt)
+    audio_file = generate_voice(gpt_response)
 
-@app.post("/webhook/event")
-async def call_event(request: Request):
+    render_url = os.getenv("RENDER_BASE_URL")
+    audio_url = f"{render_url}/static/{audio_file}"
+
+    ncco = [
+        {
+            "action": "stream",
+            "streamUrl": [audio_url]
+        }
+    ]
+    return JSONResponse(content=ncco)
+
+@app.post("/webhooks/events")
+async def events(request: Request):
     payload = await request.json()
-    print("Call event received:", payload)
-    return {"status": "ok"}
-
-@app.get("/make-call")
-def make_call():
-    response = initiate_call()
-    return {"response": response}
+    print("Vonage Event Received:", payload)
+    return {"status": "event received"}
