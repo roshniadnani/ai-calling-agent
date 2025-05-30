@@ -3,3 +3,4 @@ uvicorn
 vonage
 python-dotenv
 openai
+vonage>=4.0.0

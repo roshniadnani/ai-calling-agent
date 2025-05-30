@@ -1,32 +1,35 @@
-# main.py
+import os
 from fastapi import FastAPI, Request
 from dotenv import load_dotenv
-import os
-from pathlib import Path
-import vonage
+from vonage_call import initiate_call
 
 load_dotenv()
 
 app = FastAPI()
 
-client = vonage.Client(
-    application_id=os.getenv("VONAGE_APPLICATION_ID"),
-    private_key=Path("private.key").read_text()
-)
-voice = vonage.Voice(client)
-
 @app.get("/")
-def root():
-    return {"message": "AI Calling Agent is live"}
+def read_root():
+    return {"status": "Vonage AI Calling Agent is live!"}
 
 @app.post("/webhook/answer")
 async def answer_call(request: Request):
     return {
         "actions": [
-            {"action": "talk", "text": "Hello, this is Desiree. Let's begin the call."}
+            {
+                "action": "talk",
+                "voiceName": "Amy",
+                "text": "Hello! This is your Vonage AI calling agent. Thank you for answering the call."
+            }
         ]
     }
 
 @app.post("/webhook/event")
-async def event_handler(request: Request):
-    return {"status": "received"}
+async def call_event(request: Request):
+    payload = await request.json()
+    print("Call event received:", payload)
+    return {"status": "ok"}
+
+@app.get("/make-call")
+def make_call():
+    response = initiate_call()
+    return {"response": response}
