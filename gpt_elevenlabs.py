@@ -1,43 +1,34 @@
 import os
-import openai
-from elevenlabs import play, save, VoiceSettings, Voice, generate
 from dotenv import load_dotenv
+from openai import OpenAI
+from elevenlabs import ElevenLabs, save
 
 load_dotenv()
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
-DESIREE_VOICE_ID = os.getenv("DESIREE_VOICE_ID")
+DESIREE_AGENT_ID = os.getenv("DESIREE_AGENT_ID")  # use agent ID, not voice ID
 
-
-def generate_gpt_reply(prompt):
-    print("🧠 Generating GPT reply for prompt:", prompt)
-    response = openai.ChatCompletion.create(
+# Generate GPT response
+def generate_gpt_reply(prompt: str) -> str:
+    client = OpenAI(api_key=OPENAI_API_KEY)
+    chat = client.chat.completions.create(
         model="gpt-4",
         messages=[
-            {"role": "system", "content": "You are Desiree, a warm, polite American insurance agent."},
+            {"role": "system", "content": "You are Desiree, a professional AI insurance agent. Speak clearly and kindly."},
             {"role": "user", "content": prompt}
         ]
     )
-    reply = response.choices[0].message["content"]
-    print("✅ GPT reply:", reply)
-    return reply
+    return chat.choices[0].message.content.strip()
 
-
-def generate_voice(text, filename="desiree_output.mp3"):
-    from elevenlabs.client import ElevenLabs
-
+# Generate ElevenLabs speech from agent
+def generate_voice(text: str, filename: str = "desiree_output.mp3") -> str:
     client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
-
     audio = client.generate(
         text=text,
-        voice=Voice(voice_id=DESIREE_VOICE_ID),
-        model="eleven_multilingual_v2",
-        stream=False,
-        output_format="mp3_44100_128"
+        agent_id=DESIREE_AGENT_ID
     )
 
-    output_path = os.path.join(os.getcwd(), filename)
+    output_path = os.path.join("static", filename)
     save(audio, output_path)
-    print(f"🎧 Audio saved at: {output_path}")
     return output_path
