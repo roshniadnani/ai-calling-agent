@@ -1,60 +1,51 @@
-from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse
-from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
 import os
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from vonage import Client, Voice
+from dotenv import load_dotenv
 
-from google_sheets import append_row_to_sheet
-from datetime import datetime
-
+# Load environment variables
 load_dotenv()
 
+# FastAPI app
 app = FastAPI()
 
-# Optional CORS setup
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+# Mount static folder for audio streaming
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Load Vonage credentials
+VONAGE_API_KEY = os.getenv("VONAGE_API_KEY")
+VONAGE_API_SECRET = os.getenv("VONAGE_API_SECRET")
+VONAGE_APPLICATION_ID = os.getenv("VONAGE_APPLICATION_ID")
+VONAGE_PRIVATE_KEY_PATH = os.getenv("VONAGE_PRIVATE_KEY_PATH")
+VONAGE_VIRTUAL_NUMBER = os.getenv("VONAGE_VIRTUAL_NUMBER")
+BASE_URL = os.getenv("BASE_URL")
+
+# Setup Vonage client
+client = Client(
+    application_id=VONAGE_APPLICATION_ID,
+    private_key=VONAGE_PRIVATE_KEY_PATH,
+    key=VONAGE_API_KEY,
+    secret=VONAGE_API_SECRET
 )
+voice = Voice(client)
 
-# Root endpoint
 @app.get("/")
-async def root():
-    return {"message": "✅ AI Calling Agent is running."}
+def root():
+    return {"message": "AI Calling Agent is Live."}
 
-# Test writing to Google Sheet
-@app.get("/test-sheet")
-async def test_sheet():
-    test_data = [
-        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "+11234567890",
-        "John Doe",
-        "123 Main St",
-        "New York",
-        "10001",
-        "1990-01-01",
-        "1992-02-02",
-        "john@example.com",
-        "Auto",
-        "$100,000",
-        "2020 Toyota Camry",
-        "Yes",
-        "Test entry"
-    ]
-    append_row_to_sheet(test_data)
-    return {"status": "✅ Row added to Google Sheet"}
-
-# Vonage-compatible endpoint to stream Desiree's voice
-@app.get("/vonage-desiree-audio")
-async def vonage_desiree_audio():
-    return {
-        "actions": [
+@app.get("/make-call/{number}")
+def make_call(number: str):
+    response = voice.create_call({
+        "to": [{"type": "phone", "number": number}],
+        "from": {"type": "phone", "number": VONAGE_VIRTUAL_NUMBER},
+        "ncco": [
             {
                 "action": "stream",
-                "streamUrl": [f"{os.getenv('RENDER_URL')}/static/desiree_response.mp3"]
+                "streamUrl": [
+                    f"{BASE_URL}/static/desiree_response.mp3"
+                ]
             }
         ]
-    }
+    })
+    return response
