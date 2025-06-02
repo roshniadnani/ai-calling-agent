@@ -1,7 +1,7 @@
 #!/bin/bash
 
-echo "Installing packages manually..."
+echo "🔧 Installing dependencies..."
 pip install --upgrade pip
-pip install uvicorn
 pip install vonage==2.6.0
+pip install uvicorn
 pip install -r requirements.txt
