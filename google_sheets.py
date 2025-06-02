@@ -1,25 +1,30 @@
 import os
-import gspread
+import json
 from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
+from datetime import datetime
 
-# Path to the service account key JSON file in the 'credentials' folder
-SERVICE_ACCOUNT_FILE = os.path.join(os.path.dirname(__file__), "credentials", "ai-calling-agent-461408-f3080ffc6b7f.json")
+SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
-# Define the scope for accessing Google Sheets
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+# ✅ Load JSON string from Render Environment Variable
+service_account_info = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT"])
+credentials = Credentials.from_service_account_info(service_account_info, scopes=SCOPES)
 
+# ✅ Use .env or Render secret to set these
+SPREADSHEET_ID = os.getenv("GOOGLE_SHEET_ID")
+SHEET_NAME = os.getenv("GOOGLE_SHEET_NAME", "AI_Calling_Responses")
 
-# Create credentials and authorize gspread client
-credentials = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
-gc = gspread.authorize(credentials)
+def append_row_to_sheet(data: list):
+    service = build('sheets', 'v4', credentials=credentials)
+    sheet = service.spreadsheets()
+    
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    row = [timestamp] + data
 
-# Open the spreadsheet and the first worksheet
-spreadsheet = gc.open("AI_Calling_Responses")
-worksheet = spreadsheet.sheet1
-
-def append_row_to_sheet(row_data):
-    """
-    Appends a new row of data to the Google Sheet.
-    :param row_data: List of values matching the header order.
-    """
-    worksheet.append_row(row_data, value_input_option="USER_ENTERED")
+    request = sheet.values().append(
+        spreadsheetId=SPREADSHEET_ID,
+        range=f"{SHEET_NAME}!A1",
+        valueInputOption="USER_ENTERED",
+        body={"values": [row]}
+    )
+    request.execute()
