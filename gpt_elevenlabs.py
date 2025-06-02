@@ -1,54 +1,46 @@
 import os
 from dotenv import load_dotenv
 from openai import OpenAI
-from elevenlabs import generate, save, set_api_key
+from elevenlabs import generate, save, VoiceSettings, set_api_key
 
 # Load environment variables
 load_dotenv()
 
-# Load keys
-ELEVEN_API_KEY = os.getenv("ELEVENLABS_API_KEY")
-DESIREE_VOICE_ID = os.getenv("DESIREE_VOICE_ID")
+# Get API keys
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+ELEVEN_API_KEY = os.getenv("ELEVEN_API_KEY")
 
-# Validate keys
-if not ELEVEN_API_KEY or not DESIREE_VOICE_ID or not OPENAI_API_KEY:
+# Validate
+if not OPENAI_API_KEY or not ELEVEN_API_KEY:
     raise ValueError("❌ Missing one or more required API keys in the .env file.")
 
-# Set API keys
-set_api_key(ELEVEN_API_KEY)
+# Set API Keys
 client = OpenAI(api_key=OPENAI_API_KEY)
+set_api_key(ELEVEN_API_KEY)
 
-# Full phone interview script for Millennium Information Services
-script_prompt = """
-You are Desiree, a warm, friendly American woman working for Millennium Information Services.
-You are calling homeowners to conduct a phone interview related to homeowners insurance.
+def generate_gpt_reply(prompt: str) -> str:
+    system_prompt = (
+        "You are Desiree, a warm and professional insurance interviewer representing "
+        "Millennium Information Services. Respond using polite, clear, and American tone. "
+        "Don't say you're an AI."
+    )
 
-Use the following professional and structured tone to follow the entire script step-by-step with pauses for user responses.
+    chat_completion = client.chat.completions.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.7
+    )
+    return chat_completion.choices[0].message.content.strip()
 
-Begin now.
-"""
-
-# Generate GPT-4 response
-response = client.chat.completions.create(
-    model="gpt-4",
-    messages=[
-        {"role": "system", "content": "You are a helpful insurance agent speaking on behalf of Millennium Information Services."},
-        {"role": "user", "content": script_prompt}
-    ],
-    temperature=0.7
-)
-
-generated_text = response.choices[0].message.content.strip()
-print("📝 GPT Output:\n", generated_text)
-
-# Generate speech using ElevenLabs
-audio = generate(
-    text=generated_text,
-    voice=DESIREE_VOICE_ID,
-    model="eleven_monolingual_v1"
-)
-
-# Save audio
-save(audio, "desiree_output.mp3")
-print("✅ MP3 saved as desiree_output.mp3")
+def generate_voice(text: str, output_path="desiree_output.mp3"):
+    audio = generate(
+        text=text,
+        voice="Rachel",
+        model="eleven_monolingual_v1",
+        voice_settings=VoiceSettings(stability=0.4, similarity_boost=0.8)
+    )
+    save(audio, output_path)
+    print(f"✅ MP3 saved as {output_path}")

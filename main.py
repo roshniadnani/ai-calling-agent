@@ -1,44 +1,33 @@
-from fastapi import FastAPI, Request
-from call_vonage import make_call
+from fastapi import FastAPI
 from gpt_elevenlabs import generate_gpt_reply, generate_voice
+from pydub import AudioSegment
+from pydub.playback import play
+from fastapi.responses import FileResponse
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI()
 
-
 @app.get("/")
-def root():
-    return {"message": "AI Calling Agent is running."}
+def read_root():
+    return {"message": "🎙️ AI Calling Agent is running!"}
 
+@app.get("/call")
+def initiate_call():
+    try:
+        # Step 1: Generate GPT Interview Script
+        gpt_text = generate_gpt_reply()
+        print("📝 GPT Output:\n", gpt_text)
 
-@app.get("/make-call/{to_number}")
-def call_user(to_number: str):
-    print(f"TO NUMBER SENT: {to_number}")
-    make_call(to_number)
-    return {"status": "Call initiated", "number": to_number}
+        # Step 2: Generate MP3 Audio from Desiree Voice Agent
+        mp3_path = generate_voice(gpt_text)
+        print(f"✅ MP3 saved as {mp3_path}")
 
+        # Step 3: Return the audio file as HTTP response
+        return FileResponse(mp3_path, media_type="audio/mpeg", filename="desiree_output.mp3")
 
-@app.post("/webhooks/answer")
-async def answer_call(request: Request):
-    from fastapi.responses import JSONResponse
-
-    request_data = await request.json()
-    print("Vonage Answer Webhook:", request_data)
-
-    # Simulated first line to start call
-    gpt_text = generate_gpt_reply("")
-    audio_url = generate_voice(gpt_text)
-
-    ncco = [
-        {
-            "action": "stream",
-            "streamUrl": [audio_url]
-        }
-    ]
-    return JSONResponse(content=ncco)
-
-
-@app.post("/webhooks/event")
-async def handle_event(request: Request):
-    event_data = await request.json()
-    print("Vonage Event Webhook:", event_data)
-    return {"status": "received"}
+    except Exception as e:
+        print("❌ Error:", str(e))
+        return {"error": str(e)}
