@@ -1,12 +1,12 @@
 #!/bin/bash
 
 echo "🔧 Updating pip..."
-pip install --upgrade pip
+pip install --upgrade pip --no-cache-dir
 
-echo "📦 Installing dependencies from requirements.txt..."
-pip install -r requirements.txt
+echo "📦 Installing all requirements..."
+pip install -r requirements.txt --no-cache-dir
 
-echo "🔁 Ensuring vonage is installed..."
-pip install vonage==2.6.0
+echo "🔁 Reinstalling vonage explicitly to force dependency..."
+pip install vonage==2.6.0 --no-cache-dir
 
-echo "✅ All dependencies installed. Build complete!"
+echo "✅ Build script completed successfully."
