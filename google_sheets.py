@@ -1,23 +1,32 @@
 import os
 import json
+from datetime import datetime
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
-from datetime import datetime
 
+# Define the required Google Sheets API scope
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
-# ✅ Load JSON string from Render Environment Variable
-service_account_info = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT"])
-credentials = Credentials.from_service_account_info(service_account_info, scopes=SCOPES)
+# ✅ Use environment variable on Render, or fallback to local file when running locally
+if "GOOGLE_SERVICE_ACCOUNT" in os.environ:
+    service_account_info = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT"])
+    credentials = Credentials.from_service_account_info(service_account_info, scopes=SCOPES)
+else:
+    credentials = Credentials.from_service_account_file(
+        "credentials/ai-calling-agent-461408-f3080ffc6b7f.json", scopes=SCOPES
+    )
 
-# ✅ Use .env or Render secret to set these
+# ✅ Sheet ID and Sheet Name from environment variables
 SPREADSHEET_ID = os.getenv("GOOGLE_SHEET_ID")
 SHEET_NAME = os.getenv("GOOGLE_SHEET_NAME", "AI_Calling_Responses")
 
 def append_row_to_sheet(data: list):
+    """
+    Appends a single row of data to the configured Google Sheet.
+    """
     service = build('sheets', 'v4', credentials=credentials)
     sheet = service.spreadsheets()
-    
+
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     row = [timestamp] + data
 
