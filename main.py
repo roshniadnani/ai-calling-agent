@@ -1,47 +1,54 @@
-import os
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
-import vonage
-from dotenv import load_dotenv
+# --- Force install vonage if missing ---
+try:
+    import vonage
+except ImportError:
+    import subprocess
+    import sys
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "vonage==2.6.0"])
+    import vonage
 
-# Load environment variables
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from dotenv import load_dotenv
+import os
+
 load_dotenv()
 
-# FastAPI app
-app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# Environment credentials
 VONAGE_API_KEY = os.getenv("VONAGE_API_KEY")
 VONAGE_API_SECRET = os.getenv("VONAGE_API_SECRET")
-VONAGE_APPLICATION_ID = os.getenv("VONAGE_APPLICATION_ID")
-VONAGE_PRIVATE_KEY_PATH = os.getenv("VONAGE_PRIVATE_KEY_PATH")
 VONAGE_VIRTUAL_NUMBER = os.getenv("VONAGE_VIRTUAL_NUMBER")
-BASE_URL = os.getenv("BASE_URL")
+TO_NUMBER = os.getenv("TO_NUMBER")
 
-# Initialize Vonage client (corrected)
-client = vonage.Client(
-    application_id=VONAGE_APPLICATION_ID,
-    private_key=VONAGE_PRIVATE_KEY_PATH,
-    key=VONAGE_API_KEY,
-    secret=VONAGE_API_SECRET
-)
-voice = client.voice
+client = vonage.Client(key=VONAGE_API_KEY, secret=VONAGE_API_SECRET)
+voice = vonage.Voice(client)
+
+app = FastAPI()
 
 @app.get("/")
-def home():
-    return {"message": "AI Calling Agent is Live."}
+def read_root():
+    return {"message": "AI Calling Agent is live."}
 
-@app.get("/make-call/{number}")
-def make_call(number: str):
+@app.get("/call")
+def make_call():
     response = voice.create_call({
-        "to": [{"type": "phone", "number": number}],
+        "to": [{"type": "phone", "number": TO_NUMBER}],
         "from": {"type": "phone", "number": VONAGE_VIRTUAL_NUMBER},
-        "ncco": [
-            {
-                "action": "stream",
-                "streamUrl": [f"{BASE_URL}/static/desiree_response.mp3"]
-            }
-        ]
+        "ncco": [{
+            "action": "talk",
+            "text": "Hello, this is Desiree from Millennium Information Services. This is a test call from your AI assistant."
+        }]
     })
-    return response
+    return JSONResponse(content=response)
+
+@app.post("/webhooks/answer")
+async def answer_call(request: Request):
+    return JSONResponse(content=[{
+        "action": "talk",
+        "text": "Hi, this is Desiree. Thanks for picking up the call. I will now proceed with the phone interview."
+    }])
+
+@app.post("/webhooks/event")
+async def event_callback(request: Request):
+    event_data = await request.json()
+    print("Vonage Event:", event_data)
+    return JSONResponse(content={"status": "received"})
