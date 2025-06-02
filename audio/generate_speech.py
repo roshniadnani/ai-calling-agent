@@ -1,3 +1,4 @@
+
 import os
 import requests
 from dotenv import load_dotenv
@@ -5,10 +6,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 ELEVEN_API_KEY = os.getenv("ELEVEN_API_KEY")
-DESIREE_VOICE_ID = os.getenv("DESIREE_VOICE_ID")
+DESIREE_AGENT_ID = os.getenv("DESIREE_AGENT_ID")
 
 def generate_speech(text: str, filename: str = "desiree_response.mp3"):
-    url = f"https://api.elevenlabs.io/v1/text-to-speech/{DESIREE_VOICE_ID}/stream"
+    url = f"https://api.elevenlabs.io/v1/agents/{DESIREE_AGENT_ID}/speech"
 
     headers = {
         "xi-api-key": ELEVEN_API_KEY,
@@ -16,12 +17,7 @@ def generate_speech(text: str, filename: str = "desiree_response.mp3"):
     }
 
     payload = {
-        "text": text,
-        "model_id": "eleven_multilingual_v2",
-        "voice_settings": {
-            "stability": 0.7,
-            "similarity_boost": 0.8
-        }
+        "text": text
     }
 
     response = requests.post(url, json=payload, headers=headers)
@@ -36,6 +32,6 @@ def generate_speech(text: str, filename: str = "desiree_response.mp3"):
         print("❌ Error generating speech:", response.status_code, response.text)
         return None
 
-# Test call
+# Test it
 if __name__ == "__main__":
     generate_speech("Hello! This is Desiree from Millennium. I’m calling to complete your phone interview.")

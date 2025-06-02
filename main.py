@@ -1,73 +1,60 @@
 from fastapi import FastAPI, Request
-from pydantic import BaseModel
-from datetime import datetime
-import os
-from google_sheets import append_row_to_sheet
+from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+import os
+
+from google_sheets import append_row_to_sheet
+from datetime import datetime
 
 load_dotenv()
 
 app = FastAPI()
 
-class CallData(BaseModel):
-    caller_number: str
-    name: str = ""
-    address: str = ""
-    city: str = ""
-    zip_code: str = ""
-    dob: str = ""
-    spouse_dob: str = ""
-    email: str = ""
-    policy_type: str = ""
-    coverage_amount: str = ""
-    vehicle_info: str = ""
-    appointment_scheduled: str = ""
-    notes: str = ""
+# Optional CORS setup
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# ✅ Default root
+# Root endpoint
 @app.get("/")
 async def root():
-    return {"message": "AI Calling Agent is running."}
+    return {"message": "✅ AI Calling Agent is running."}
 
-# ✅ Health check
-@app.get("/health")
-def health_check():
-    return {"status": "ok"}
-
-# ✅ Test endpoint for Google Sheets
+# Test writing to Google Sheet
 @app.get("/test-sheet")
-def test_sheet():
-    try:
-        append_row_to_sheet(["Test Name", "test@email.com", "Test City"])
-        return {"success": True}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+async def test_sheet():
+    test_data = [
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "+11234567890",
+        "John Doe",
+        "123 Main St",
+        "New York",
+        "10001",
+        "1990-01-01",
+        "1992-02-02",
+        "john@example.com",
+        "Auto",
+        "$100,000",
+        "2020 Toyota Camry",
+        "Yes",
+        "Test entry"
+    ]
+    append_row_to_sheet(test_data)
+    return {"status": "✅ Row added to Google Sheet"}
 
-# ✅ Actual POST API to log data to Google Sheets
-@app.post("/log-to-sheet")
-async def log_to_sheet(data: CallData):
-    try:
-        row = [
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            data.caller_number,
-            data.name,
-            data.address,
-            data.city,
-            data.zip_code,
-            data.dob,
-            data.spouse_dob,
-            data.email,
-            data.policy_type,
-            data.coverage_amount,
-            data.vehicle_info,
-            data.appointment_scheduled,
-            data.notes
+# Vonage-compatible endpoint to stream Desiree's voice
+@app.get("/vonage-desiree-audio")
+async def vonage_desiree_audio():
+    return {
+        "actions": [
+            {
+                "action": "stream",
+                "streamUrl": [f"{os.getenv('RENDER_URL')}/static/desiree_response.mp3"]
+            }
         ]
-        append_row_to_sheet(row)
-        return {"status": "success", "message": "Data logged to sheet."}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-import uvicorn
-
-if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+    }
