@@ -1,50 +1,54 @@
 import os
-import openai
-from elevenlabs import generate, save
 from dotenv import load_dotenv
-from datetime import datetime
+from openai import OpenAI
+from elevenlabs import generate, save, set_api_key
 
+# Load environment variables
 load_dotenv()
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
-elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
-agent_url = os.getenv("DESIREE_AGENT_URL")
+# Load keys
+ELEVEN_API_KEY = os.getenv("ELEVENLABS_API_KEY")
+DESIREE_VOICE_ID = os.getenv("DESIREE_VOICE_ID")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-def generate_gpt_reply(user_input):
-    prompt = f"""
-You are Desiree, a kind and helpful American female insurance agent from Millennium Information Services.
+# Validate keys
+if not ELEVEN_API_KEY or not DESIREE_VOICE_ID or not OPENAI_API_KEY:
+    raise ValueError("❌ Missing one or more required API keys in the .env file.")
 
-Follow this script strictly, one step at a time:
+# Set API keys
+set_api_key(ELEVEN_API_KEY)
+client = OpenAI(api_key=OPENAI_API_KEY)
 
-1. Start with: "Hi, this is Desiree calling on behalf of Millennium Information Services. I’d like to verify some information to help process your insurance request. May I confirm a few quick details?"
+# Full phone interview script for Millennium Information Services
+script_prompt = """
+You are Desiree, a warm, friendly American woman working for Millennium Information Services.
+You are calling homeowners to conduct a phone interview related to homeowners insurance.
 
-2. Then go through the script from the Homesite-360-HVR-MVR-Phone-Interview document, question-by-question.
+Use the following professional and structured tone to follow the entire script step-by-step with pauses for user responses.
 
-3. Wait for the user to answer before continuing (in the real app, the system handles this).
-
-4. Speak naturally and professionally. Do not answer for the user. Ask clearly, and never rush.
-
-Current conversation so far:
-{user_input}
-
-Continue as Desiree with the next appropriate question from the script:
+Begin now.
 """
-    response = openai.ChatCompletion.create(
-        model="gpt-4",
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return response['choices'][0]['message']['content']
 
+# Generate GPT-4 response
+response = client.chat.completions.create(
+    model="gpt-4",
+    messages=[
+        {"role": "system", "content": "You are a helpful insurance agent speaking on behalf of Millennium Information Services."},
+        {"role": "user", "content": script_prompt}
+    ],
+    temperature=0.7
+)
 
-def generate_voice(text):
-    audio = generate(
-        api_key=elevenlabs_api_key,
-        agent_id="PU6B8gfYqp3DrePOTFvu",
-        text=text,
-        model="eleven_monolingual_v1"
-    )
+generated_text = response.choices[0].message.content.strip()
+print("📝 GPT Output:\n", generated_text)
 
-    timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-    audio_path = f"output/audio_{timestamp}.mp3"
-    save(audio, audio_path)
-    return audio_path
+# Generate speech using ElevenLabs
+audio = generate(
+    text=generated_text,
+    voice=DESIREE_VOICE_ID,
+    model="eleven_monolingual_v1"
+)
+
+# Save audio
+save(audio, "desiree_output.mp3")
+print("✅ MP3 saved as desiree_output.mp3")
