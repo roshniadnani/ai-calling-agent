@@ -1,7 +1,12 @@
 #!/bin/bash
 
-echo "🔧 Installing dependencies..."
+echo "🔧 Updating pip..."
 pip install --upgrade pip
-pip install vonage==2.6.0
-pip install uvicorn
+
+echo "📦 Installing dependencies from requirements.txt..."
 pip install -r requirements.txt
+
+echo "🔁 Installing vonage manually to fix Render issue..."
+pip install vonage==2.6.0
+
+echo "🚀 Build complete!"
