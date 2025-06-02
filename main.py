@@ -24,10 +24,26 @@ class CallData(BaseModel):
     appointment_scheduled: str = ""
     notes: str = ""
 
+# ✅ Default root
 @app.get("/")
 async def root():
     return {"message": "AI Calling Agent is running."}
 
+# ✅ Health check
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
+
+# ✅ Test endpoint for Google Sheets
+@app.get("/test-sheet")
+def test_sheet():
+    try:
+        append_row_to_sheet(["Test Name", "test@email.com", "Test City"])
+        return {"success": True}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+# ✅ Actual POST API to log data to Google Sheets
 @app.post("/log-to-sheet")
 async def log_to_sheet(data: CallData):
     try:
