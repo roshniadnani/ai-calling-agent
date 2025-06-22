@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, FileResponse
 from dotenv import load_dotenv
 
-# Emergency fix for Vonage install on Render
+# Emergency install (Render sometimes fails to load it correctly)
 try:
     import vonage
 except ImportError:
@@ -14,12 +14,14 @@ except ImportError:
 
 from gpt_elevenlabs import generate_gpt_reply, generate_voice
 from google_sheets import append_row_to_sheet
+from call_vonage import make_call
+from pydantic import BaseModel
 
 load_dotenv()
 app = FastAPI()
 RENDER_BASE_URL = os.getenv("RENDER_BASE_URL")
 
-# Global in-memory session
+# Memory session for call tracking
 session_state = {}
 
 questions = [
@@ -66,19 +68,18 @@ async def handle_event(request: Request):
     state = session_state[uuid]
     step = state["step"]
     state["answers"].append(user_input)
-
     step += 1
     state["step"] = step
+
+    audio_path = f"static/response_{uuid}.mp3"
 
     if step >= len(questions):
         append_row_to_sheet(state["answers"])
         farewell = "Thank you! Your answers have been recorded. A representative will follow up with you soon."
-        audio_path = f"static/response_{uuid}.mp3"
         generate_voice(farewell, output_path=audio_path)
         session_state.pop(uuid, None)
     else:
         next_question = questions[step]
-        audio_path = f"static/response_{uuid}.mp3"
         generate_voice(next_question, output_path=audio_path)
 
     return {"status": "ok"}
@@ -97,3 +98,12 @@ def stream_mp3(uuid: str):
     if os.path.exists(path):
         return FileResponse(path, media_type="audio/mpeg")
     return {"error": "File not found"}
+
+# ✅ Outbound call trigger
+class CallRequest(BaseModel):
+    to_number: str
+
+@app.post("/call")
+def call_user(req: CallRequest):
+    make_call(req.to_number)
+    return {"status": "Call started", "to": req.to_number}
