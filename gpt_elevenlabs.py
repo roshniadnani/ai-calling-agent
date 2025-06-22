@@ -3,25 +3,30 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from elevenlabs import generate, save, VoiceSettings, set_api_key
 
+# Load environment variables
 load_dotenv()
 
-# Keys
+# Get API keys from .env
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ELEVEN_API_KEY = os.getenv("ELEVEN_API_KEY")
-ELEVEN_AGENT_ID = os.getenv("ELEVEN_AGENT_ID")
+DESIREE_VOICE_ID = os.getenv("DESIREE_VOICE_ID")
 
-if not OPENAI_API_KEY or not ELEVEN_API_KEY or not ELEVEN_AGENT_ID:
+# Validate required keys
+if not OPENAI_API_KEY or not ELEVEN_API_KEY or not DESIREE_VOICE_ID:
     raise ValueError("❌ Missing one or more required API keys in the .env file.")
 
+# Initialize clients
 client = OpenAI(api_key=OPENAI_API_KEY)
 set_api_key(ELEVEN_API_KEY)
 
+# Generate GPT response
 def generate_gpt_reply(prompt: str) -> str:
     system_prompt = (
         "You are Desiree, a warm and professional insurance interviewer representing "
-        "Millennium Information Services. Respond using polite, clear, and American tone. "
-        "Don't say you're an AI."
+        "Millennium Information Services. Speak clearly and naturally, as if you're a real human. "
+        "Never say you're an AI or language model."
     )
+
     chat_completion = client.chat.completions.create(
         model="gpt-4",
         messages=[
@@ -30,19 +35,19 @@ def generate_gpt_reply(prompt: str) -> str:
         ],
         temperature=0.7
     )
+
     return chat_completion.choices[0].message.content.strip()
 
-def generate_voice(text: str, output_path="static/desiree_response.mp3") -> str:
-    try:
-        audio = generate(
-            text=text,
-            voice=ELEVEN_AGENT_ID,
-            model="eleven_monolingual_v1",
-            voice_settings=VoiceSettings(stability=0.4, similarity_boost=0.8)
+# Generate and save audio
+def generate_voice(text: str, output_path="static/desiree_output.mp3"):
+    audio = generate(
+        text=text,
+        voice=DESIREE_VOICE_ID,
+        model="eleven_monolingual_v1",
+        voice_settings=VoiceSettings(
+            stability=0.4,
+            similarity_boost=0.85
         )
-        save(audio, output_path)
-        print(f"✅ MP3 saved as {output_path}")
-        return output_path
-    except Exception as e:
-        print(f"❌ Error generating voice: {e}")
-        return ""
+    )
+    save(audio, output_path)
+    print(f"✅ Voice response saved to {output_path}")
