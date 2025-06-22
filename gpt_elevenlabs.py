@@ -1,30 +1,29 @@
 import os
 from dotenv import load_dotenv
 from openai import OpenAI
-from elevenlabs import generate, save, VoiceSettings, set_api_key
+from elevenlabs.client import ElevenLabs
+from elevenlabs import VoiceSettings
 
 # Load environment variables
 load_dotenv()
 
-# Get API keys from .env
+# Get API keys
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ELEVEN_API_KEY = os.getenv("ELEVEN_API_KEY")
 DESIREE_VOICE_ID = os.getenv("DESIREE_VOICE_ID")
 
-# Validate required keys
 if not OPENAI_API_KEY or not ELEVEN_API_KEY or not DESIREE_VOICE_ID:
-    raise ValueError("❌ Missing one or more required API keys in the .env file.")
+    raise ValueError("❌ Missing one or more required API keys in .env.")
 
 # Initialize clients
 client = OpenAI(api_key=OPENAI_API_KEY)
-set_api_key(ELEVEN_API_KEY)
+tts = ElevenLabs(api_key=ELEVEN_API_KEY)
 
-# Generate GPT response
 def generate_gpt_reply(prompt: str) -> str:
     system_prompt = (
         "You are Desiree, a warm and professional insurance interviewer representing "
-        "Millennium Information Services. Speak clearly and naturally, as if you're a real human. "
-        "Never say you're an AI or language model."
+        "Millennium Information Services. Respond using polite, clear, and American tone. "
+        "Don't say you're an AI."
     )
 
     chat_completion = client.chat.completions.create(
@@ -35,19 +34,15 @@ def generate_gpt_reply(prompt: str) -> str:
         ],
         temperature=0.7
     )
-
     return chat_completion.choices[0].message.content.strip()
 
-# Generate and save audio
-def generate_voice(text: str, output_path="static/desiree_output.mp3"):
-    audio = generate(
+def generate_voice(text: str, output_path="desiree_output.mp3"):
+    audio = tts.generate(
         text=text,
         voice=DESIREE_VOICE_ID,
         model="eleven_monolingual_v1",
-        voice_settings=VoiceSettings(
-            stability=0.4,
-            similarity_boost=0.85
-        )
+        voice_settings=VoiceSettings(stability=0.4, similarity_boost=0.8)
     )
-    save(audio, output_path)
-    print(f"✅ Voice response saved to {output_path}")
+    with open(output_path, "wb") as f:
+        f.write(audio)
+    print(f"✅ MP3 saved at {output_path}")
