@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-# Emergency install for Vonage (in case it's missing)
+# Emergency install for Vonage
 try:
     import vonage
 except ImportError:
@@ -19,21 +19,19 @@ from gpt_elevenlabs import generate_voice
 from google_sheets import append_row_to_sheet
 from call_vonage import make_call
 
-# Load environment variables
+# Load env vars
 load_dotenv()
 
-# Generate intro voice on startup
-generate_voice("Hi, this is Desiree from Millennium Information Services. I’ll be conducting a quick home interview for insurance purposes. Is now a good time to talk?")
+# Startup pre-cache
+generate_voice("Hi, this is Desiree from Millennium Information Services. I’ll be conducting a quick home interview for insurance purposes. Is now a good time to talk?", output_path="static/desiree_response.mp3")
 
-# Initialize FastAPI
+# App config
 app = FastAPI()
-
-# Static audio folder
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
 RENDER_BASE_URL = os.getenv("RENDER_BASE_URL")
 session_state = {}
 
+# Predefined questions
 questions = [
     "Can I confirm your full name?",
     "What is your full street address, including city and ZIP code?",
@@ -56,16 +54,23 @@ questions = [
 def root():
     return {"message": "✅ AI Calling Agent Live with Multi-Turn Script"}
 
-@app.get("/webhooks/answer")
+@app.post("/webhooks/answer")
 def answer_call():
-    greeting = "Hi, this is Desiree from Millennium Information Services. I’ll be conducting a quick home interview for insurance purposes. Is now a good time to talk?"
-    output_path = "static/desiree_response.mp3"
-    generate_voice(greeting, output_path=output_path)
-
     public_url = f"{RENDER_BASE_URL}/static/desiree_response.mp3"
     print(f"✅ Serving audio from: {public_url}")
-
-    ncco = [{"action": "stream", "streamUrl": [public_url]}]
+    ncco = [
+        {"action": "stream", "streamUrl": [public_url]},
+        {
+            "action": "input",
+            "eventUrl": [f"{RENDER_BASE_URL}/webhooks/event"],
+            "type": ["speech"],
+            "speech": {
+                "language": "en-US",
+                "endOnSilence": 1.5,
+                "context": ["yes", "no", "sure", "okay", "not now"]
+            }
+        }
+    ]
     return JSONResponse(content=ncco)
 
 @app.post("/webhooks/event")
@@ -95,7 +100,21 @@ async def handle_event(request: Request):
         next_question = questions[state["step"]]
         generate_voice(next_question, output_path=audio_path)
 
-    return {"status": "ok"}
+    public_url = f"{RENDER_BASE_URL}/{audio_path}"
+    ncco = [
+        {"action": "stream", "streamUrl": [public_url]},
+        {
+            "action": "input",
+            "eventUrl": [f"{RENDER_BASE_URL}/webhooks/event"],
+            "type": ["speech"],
+            "speech": {
+                "language": "en-US",
+                "endOnSilence": 1.5,
+                "context": ["yes", "no", "sure", "okay", "not now"]
+            }
+        }
+    ]
+    return JSONResponse(content=ncco)
 
 @app.get("/webhooks/next")
 def serve_next(uuid: str):
