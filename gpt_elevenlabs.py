@@ -1,30 +1,27 @@
+from elevenlabs import Voice, VoiceSettings, play, save, generate, set_api_key
 import os
-from dotenv import load_dotenv
-from elevenlabs.client import ElevenLabs
 
-load_dotenv()
+# ✅ Set ElevenLabs API Key
+set_api_key(os.getenv("ELEVENLABS_API_KEY"))
 
-ELEVEN_API_KEY = os.getenv("ELEVEN_API_KEY")
-DESIREE_VOICE_ID = os.getenv("DESIREE_VOICE_ID")  # zWRDoH56JB9twPHdkksW
-MODEL_ID = os.getenv("ELEVEN_MODEL_ID", "eleven_monolingual_v1")
+# ✅ Desiree voice ID (from ElevenLabs studio)
+DESIREE_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"  # Replace if you have custom ID
 
-if not ELEVEN_API_KEY or not DESIREE_VOICE_ID:
-    raise EnvironmentError("❌ Missing ElevenLabs API key or voice ID")
-
-client = ElevenLabs(api_key=ELEVEN_API_KEY)
-
-def generate_voice(text: str, output_path="static/desiree_response.mp3"):
+def generate_voice(text, filename="static/desiree_response.mp3"):
     try:
-        audio_stream = client.text_to_speech.convert(
+        audio = generate(
             text=text,
-            voice_id=DESIREE_VOICE_ID,
-            model_id=MODEL_ID,
-            output_format="mp3_44100_128",
-            optimize_streaming_latency="4"
+            voice=Voice(
+                voice_id=DESIREE_VOICE_ID,
+                settings=VoiceSettings(
+                    stability=0.5,
+                    similarity_boost=0.8,
+                    style=0.3,
+                    use_speaker_boost=True,
+                ),
+            )
         )
-        with open(output_path, "wb") as f:
-            for chunk in audio_stream:
-                f.write(chunk)
-        print(f"✅ Audio saved to {output_path}")
+        save(audio, filename)
+        print(f"✅ Audio saved to {filename}")
     except Exception as e:
         print(f"❌ Error generating voice: {e}")
