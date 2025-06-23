@@ -1,27 +1,27 @@
-from elevenlabs import Voice, VoiceSettings, play, save, generate, set_api_key
+# gpt_elevenlabs.py
+
 import os
+from elevenlabs import Voice, VoiceSettings, play, save, generate
+from elevenlabs import set_api_key
 
-# ✅ Set ElevenLabs API Key
-set_api_key(os.getenv("ELEVENLABS_API_KEY"))
+# ✅ Get API key from environment and set it
+api_key = os.getenv("ELEVENLABS_API_KEY")
+if not api_key:
+    raise EnvironmentError("ELEVENLABS_API_KEY environment variable is not set")
+set_api_key(api_key)
 
-# ✅ Desiree voice ID (from ElevenLabs studio)
-DESIREE_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"  # Replace if you have custom ID
-
-def generate_voice(text, filename="static/desiree_response.mp3"):
+def generate_voice(text: str, voice_name="Desiree", file_path="static/desiree_response.mp3"):
     try:
         audio = generate(
             text=text,
             voice=Voice(
-                voice_id=DESIREE_VOICE_ID,
-                settings=VoiceSettings(
-                    stability=0.5,
-                    similarity_boost=0.8,
-                    style=0.3,
-                    use_speaker_boost=True,
-                ),
+                voice_id="EXAVITQu4vr4xnSDxMaL",  # Desiree
+                settings=VoiceSettings(stability=0.5, similarity_boost=0.75)
             )
         )
-        save(audio, filename)
-        print(f"✅ Audio saved to {filename}")
+        save(audio, file_path)
+        print(f"✅ Audio saved to {file_path}")
+        return file_path
     except Exception as e:
         print(f"❌ Error generating voice: {e}")
+        return None
