@@ -105,7 +105,16 @@ def stream_mp3(uuid: str):
 class CallRequest(BaseModel):
     to_number: str
 
-@app.post("/call")
-def call_user(req: CallRequest):
-    make_call(req.to_number)
-    return {"status": "📞 Call started", "to": req.to_number}
+@app.post("/webhooks/answer")
+async def answer_call(request: Request):
+    print("📞 /webhooks/answer hit from Vonage")
+
+    greeting = "Hi, this is Desiree from Millennium Information Services. I’ll be conducting a quick home interview for insurance purposes. Is now a good time to talk?"
+    output_path = "static/desiree_response.mp3"
+    generate_voice(greeting, output_path=output_path)
+
+    public_url = f"{RENDER_BASE_URL}/static/desiree_response.mp3"
+    print(f"✅ Serving audio from: {public_url}")
+
+    ncco = [{"action": "stream", "streamUrl": [public_url]}]
+    return JSONResponse(content=ncco)
