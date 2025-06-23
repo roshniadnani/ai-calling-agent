@@ -1,49 +1,52 @@
 import os
 from dotenv import load_dotenv
 from openai import OpenAI
-from elevenlabs import generate, save, VoiceSettings, set_api_key
+from elevenlabs import VoiceSettings
+from elevenlabs.client import ElevenLabs
 
-# Load environment variables
+# Load environment variables from .env
 load_dotenv()
 
-# API Keys
+# Get API keys
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ELEVEN_API_KEY = os.getenv("ELEVEN_API_KEY")
-DESIREE_VOICE_ID = os.getenv("DESIREE_VOICE_ID")
+DESIREE_VOICE_ID = os.getenv("DESIREE_VOICE_ID")  # Example: zWRDoH56JB9twPHdkksW
 
-# Validate
-if not OPENAI_API_KEY or not ELEVEN_API_KEY or not DESIREE_VOICE_ID:
-    raise EnvironmentError("❌ Missing OpenAI or ElevenLabs credentials in .env")
+# Check presence
+if not OPENAI_API_KEY or not ELEVEN_API_KEY:
+    raise EnvironmentError("❌ Missing OpenAI or ElevenLabs API keys.")
 
-# Configure clients
+# Initialize OpenAI
 client = OpenAI(api_key=OPENAI_API_KEY)
-set_api_key(ELEVEN_API_KEY)
+
+# Initialize ElevenLabs client
+eleven = ElevenLabs(api_key=ELEVEN_API_KEY)
 
 def generate_gpt_reply(prompt: str) -> str:
-    """Generates human-like reply as Desiree using GPT-4."""
+    """Returns a natural language response from GPT-4 based on the prompt."""
     try:
         system_prompt = (
             "You are Desiree, a professional, warm and helpful insurance representative. "
-            "Ask clear follow-up questions and speak naturally. Avoid AI references."
+            "Ask clear questions in a natural tone and never mention AI."
         )
 
-        chat = client.chat.completions.create(
+        chat_completion = client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.6
+            temperature=0.7
         )
-        return chat.choices[0].message.content.strip()
+        return chat_completion.choices[0].message.content.strip()
     except Exception as e:
-        print("❌ GPT error:", e)
-        return "Sorry, I'm having trouble generating a response."
+        print("❌ GPT Error:", e)
+        return "Sorry, I'm having trouble generating a response right now."
 
 def generate_voice(text: str, output_path="static/desiree_response.mp3"):
-    """Converts response to speech using Desiree’s voice."""
+    """Generates MP3 audio using Desiree's ElevenLabs voice."""
     try:
-        audio = generate(
+        audio = eleven.generate(
             text=text,
             voice=DESIREE_VOICE_ID,
             model="eleven_monolingual_v1",
@@ -52,7 +55,8 @@ def generate_voice(text: str, output_path="static/desiree_response.mp3"):
                 similarity_boost=0.8
             )
         )
-        save(audio, output_path)
+        with open(output_path, "wb") as f:
+            f.write(audio)
         print(f"✅ Audio saved to {output_path}")
     except Exception as e:
         print("❌ ElevenLabs audio error:", e)
