@@ -22,6 +22,12 @@ from call_vonage import make_call
 # Load environment variables
 load_dotenv()
 
+from gpt_elevenlabs import generate_voice
+
+# Generate once on startup
+generate_voice("Hi, this is Desiree from Millennium Information Services. I’ll be conducting a quick home interview for insurance purposes. Is now a good time to talk?")
+
+
 # Initialize FastAPI
 app = FastAPI()
 
