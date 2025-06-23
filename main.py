@@ -106,3 +106,11 @@ def stream_mp3(uuid: str):
 
 class CallRequest(BaseModel):
     to_number: str
+class CallRequest(BaseModel):
+    to_number: str
+
+@app.post("/call")
+def trigger_outbound_call(request: CallRequest):
+    print(f"📞 /call received for: {request.to_number}")
+    success = make_call(request.to_number)
+    return {"status": "ok" if success else "error"}
