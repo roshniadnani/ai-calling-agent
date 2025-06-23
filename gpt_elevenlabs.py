@@ -10,23 +10,19 @@ if not api_key:
 set_api_key(api_key)
 
 # ✅ Generates audio file using ElevenLabs
-def generate_voice(text: str, voice_name="Desiree", file_path="static/desiree_response.mp3"):
-    try:
-        audio = generate(
-            text=text,
-            voice=Voice(
-                voice_id="EXAVITQu4vr4xnSDxMaL",  # Desiree
-                settings=VoiceSettings(stability=0.5, similarity_boost=0.75)
-            )
-        )
-        save(audio, file_path)
-        print(f"✅ Audio saved to {file_path}")
-        return file_path
-    except Exception as e:
-        print(f"❌ Error generating voice: {e}")
-        return None
+from elevenlabs import generate, save, Voice, VoiceSettings, set_api_key
+import os
 
-# ✅ Dummy GPT response function (to simulate actual generation)
-def generate_gpt_reply(prompt):
-    # Replace this with real logic later
-    return f"Hi! You said: {prompt}. I'm Desiree. How can I help?"
+set_api_key(os.getenv("ELEVENLABS_API_KEY"))
+
+def generate_voice(text, output_path="static/desiree_response.mp3"):
+    audio = generate(
+        text=text,
+        voice=Voice(
+            voice_id="EXAVITQu4vr4xnSDxMaL",  # Replace with Desiree's actual ID if different
+            settings=VoiceSettings(stability=0.45, similarity_boost=0.7)
+        ),
+        model="eleven_monolingual_v1"
+    )
+    save(audio, output_path)
+    return output_path
