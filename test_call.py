@@ -1,26 +1,16 @@
 import requests
 
-# Replace this with your deployed Render base URL
-BASE_URL = "https://ai-calling-agent-9hv2.onrender.com"
+url = "https://ai-calling-agent-9hv2.onrender.com/call"
+payload = {"to_number": "+13104211169"}
 
-# Number to call
-to_number = "+13104211169"
+print(f"📞 Initiating outbound call to: {payload['to_number']}")
+res = requests.post(url, json=payload)
 
-try:
-    print("📞 Initiating outbound call to:", to_number)
-    
-    response = requests.post(
-        f"{BASE_URL}/call",
-        json={"to_number": to_number}
-    )
+print(f"🔹 Status: {res.status_code}")
+print(f"🔹 Headers: {res.headers}")
+print(f"🔹 Body: {res.text}")
 
-    print("🔹 Status:", response.status_code)
-    print("🔹 Headers:", response.headers)
-    print("🔹 Body:", repr(response.text))
-
-    if response.status_code == 200:
-        print("✅ Call trigger successful.")
-    else:
-        print("❌ Failed to trigger call.")
-except Exception as e:
-    print(f"❌ Error during request: {e}")
+if res.status_code == 200:
+    print("✅ Call trigger successful.")
+else:
+    print("❌ Failed to trigger call.")
