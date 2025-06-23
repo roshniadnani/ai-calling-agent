@@ -15,7 +15,7 @@ except ImportError:
     import vonage
 
 # Internal modules
-from gpt_elevenlabs import generate_gpt_reply, generate_voice
+from gpt_elevenlabs import generate_voice
 from google_sheets import append_row_to_sheet
 from call_vonage import make_call
 
