@@ -3,6 +3,7 @@ import subprocess
 import sys
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
@@ -17,14 +18,13 @@ from gpt_elevenlabs import generate_gpt_reply, generate_voice
 from google_sheets import append_row_to_sheet
 from call_vonage import make_call
 
-load_dotenv()
 app = FastAPI()
-RENDER_BASE_URL = os.getenv("RENDER_BASE_URL")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+load_dotenv()
 
-# In-memory session store
+RENDER_BASE_URL = os.getenv("RENDER_BASE_URL")
 session_state = {}
 
-# Call script questions
 questions = [
     "Can I confirm your full name?",
     "What is your full street address, including city and ZIP code?",
@@ -48,11 +48,14 @@ def root():
     return {"message": "✅ AI Calling Agent Live with Multi-Turn Script"}
 
 @app.post("/webhooks/answer")
-def answer_call():
+async def answer_call(request: Request):
+    print("📞 /webhooks/answer hit from Vonage")
     greeting = "Hi, this is Desiree from Millennium Information Services. I’ll be conducting a quick home interview for insurance purposes. Is now a good time to talk?"
     output_path = "static/desiree_response.mp3"
     generate_voice(greeting, output_path=output_path)
-    ncco = [{"action": "stream", "streamUrl": [f"{RENDER_BASE_URL}/static/desiree_response.mp3"]}]
+    public_url = f"{RENDER_BASE_URL}/static/desiree_response.mp3"
+    print(f"✅ Serving audio from: {public_url}")
+    ncco = [{"action": "stream", "streamUrl": [public_url]}]
     return JSONResponse(content=ncco)
 
 @app.post("/webhooks/event")
@@ -101,20 +104,5 @@ def stream_mp3(uuid: str):
         return FileResponse(path, media_type="audio/mpeg")
     return {"error": "File not found"}
 
-# Outbound Call Trigger API
 class CallRequest(BaseModel):
     to_number: str
-
-@app.post("/webhooks/answer")
-async def answer_call(request: Request):
-    print("📞 /webhooks/answer hit from Vonage")
-
-    greeting = "Hi, this is Desiree from Millennium Information Services. I’ll be conducting a quick home interview for insurance purposes. Is now a good time to talk?"
-    output_path = "static/desiree_response.mp3"
-    generate_voice(greeting, output_path=output_path)
-
-    public_url = f"{RENDER_BASE_URL}/static/desiree_response.mp3"
-    print(f"✅ Serving audio from: {public_url}")
-
-    ncco = [{"action": "stream", "streamUrl": [public_url]}]
-    return JSONResponse(content=ncco)
