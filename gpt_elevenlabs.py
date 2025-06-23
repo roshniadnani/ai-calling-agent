@@ -1,15 +1,15 @@
 # gpt_elevenlabs.py
 
 import os
-from elevenlabs import Voice, VoiceSettings, play, save, generate
-from elevenlabs import set_api_key
+from elevenlabs import generate, save, Voice, VoiceSettings, set_api_key
 
-# ✅ Get API key from environment and set it
+# ✅ Get API key from environment variable
 api_key = os.getenv("ELEVENLABS_API_KEY")
 if not api_key:
-    raise EnvironmentError("ELEVENLABS_API_KEY environment variable is not set")
+    raise EnvironmentError("ELEVENLABS_API_KEY is not set")
 set_api_key(api_key)
 
+# ✅ Generates audio file using ElevenLabs
 def generate_voice(text: str, voice_name="Desiree", file_path="static/desiree_response.mp3"):
     try:
         audio = generate(
@@ -25,3 +25,8 @@ def generate_voice(text: str, voice_name="Desiree", file_path="static/desiree_re
     except Exception as e:
         print(f"❌ Error generating voice: {e}")
         return None
+
+# ✅ Dummy GPT response function (to simulate actual generation)
+def generate_gpt_reply(prompt):
+    # Replace this with real logic later
+    return f"Hi! You said: {prompt}. I'm Desiree. How can I help?"
