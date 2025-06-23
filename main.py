@@ -4,8 +4,9 @@ import sys
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, FileResponse
 from dotenv import load_dotenv
+from pydantic import BaseModel
 
-# Emergency install (Render sometimes fails to load it correctly)
+# Emergency install fix (for Render)
 try:
     import vonage
 except ImportError:
@@ -15,15 +16,15 @@ except ImportError:
 from gpt_elevenlabs import generate_gpt_reply, generate_voice
 from google_sheets import append_row_to_sheet
 from call_vonage import make_call
-from pydantic import BaseModel
 
 load_dotenv()
 app = FastAPI()
 RENDER_BASE_URL = os.getenv("RENDER_BASE_URL")
 
-# Memory session for call tracking
+# In-memory session store
 session_state = {}
 
+# Call script questions
 questions = [
     "Can I confirm your full name?",
     "What is your full street address, including city and ZIP code?",
@@ -68,18 +69,17 @@ async def handle_event(request: Request):
     state = session_state[uuid]
     step = state["step"]
     state["answers"].append(user_input)
-    step += 1
-    state["step"] = step
+    state["step"] += 1
 
     audio_path = f"static/response_{uuid}.mp3"
 
-    if step >= len(questions):
+    if state["step"] >= len(questions):
         append_row_to_sheet(state["answers"])
         farewell = "Thank you! Your answers have been recorded. A representative will follow up with you soon."
         generate_voice(farewell, output_path=audio_path)
         session_state.pop(uuid, None)
     else:
-        next_question = questions[step]
+        next_question = questions[state["step"]]
         generate_voice(next_question, output_path=audio_path)
 
     return {"status": "ok"}
@@ -88,8 +88,10 @@ async def handle_event(request: Request):
 def serve_next(uuid: str):
     audio_path = f"static/response_{uuid}.mp3"
     if os.path.exists(audio_path):
-        ncco = [{"action": "stream", "streamUrl": [f"{RENDER_BASE_URL}/webhooks/next-audio?uuid={uuid}"]}]
-        return JSONResponse(content=ncco)
+        return JSONResponse(content=[{
+            "action": "stream",
+            "streamUrl": [f"{RENDER_BASE_URL}/webhooks/next-audio?uuid={uuid}"]
+        }])
     return JSONResponse(content={"error": "Response audio not ready."}, status_code=404)
 
 @app.get("/webhooks/next-audio")
@@ -99,11 +101,11 @@ def stream_mp3(uuid: str):
         return FileResponse(path, media_type="audio/mpeg")
     return {"error": "File not found"}
 
-# ✅ Outbound call trigger
+# Outbound Call Trigger API
 class CallRequest(BaseModel):
     to_number: str
 
 @app.post("/call")
 def call_user(req: CallRequest):
     make_call(req.to_number)
-    return {"status": "Call started", "to": req.to_number}
+    return {"status": "📞 Call started", "to": req.to_number}
