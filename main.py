@@ -22,11 +22,8 @@ from call_vonage import make_call
 # Load environment variables
 load_dotenv()
 
-from gpt_elevenlabs import generate_voice
-
-# Generate once on startup
+# Generate intro voice on startup
 generate_voice("Hi, this is Desiree from Millennium Information Services. I’ll be conducting a quick home interview for insurance purposes. Is now a good time to talk?")
-
 
 # Initialize FastAPI
 app = FastAPI()
@@ -34,13 +31,9 @@ app = FastAPI()
 # Static audio folder
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Your Render base domain
 RENDER_BASE_URL = os.getenv("RENDER_BASE_URL")
-
-# In-memory session store (used during live call flow)
 session_state = {}
 
-# Predefined call script
 questions = [
     "Can I confirm your full name?",
     "What is your full street address, including city and ZIP code?",
@@ -59,13 +52,11 @@ questions = [
     "What time works best for your appointment?",
 ]
 
-# Root route
 @app.get("/")
 def root():
     return {"message": "✅ AI Calling Agent Live with Multi-Turn Script"}
 
-# Answer Webhook (Initial call pickup)
-@app.post("/webhooks/answer")
+@app.get("/webhooks/answer")
 def answer_call():
     greeting = "Hi, this is Desiree from Millennium Information Services. I’ll be conducting a quick home interview for insurance purposes. Is now a good time to talk?"
     output_path = "static/desiree_response.mp3"
@@ -77,7 +68,6 @@ def answer_call():
     ncco = [{"action": "stream", "streamUrl": [public_url]}]
     return JSONResponse(content=ncco)
 
-# Event Webhook (Handles user replies)
 @app.post("/webhooks/event")
 async def handle_event(request: Request):
     payload = await request.json()
@@ -107,7 +97,6 @@ async def handle_event(request: Request):
 
     return {"status": "ok"}
 
-# Optional polling route if needed
 @app.get("/webhooks/next")
 def serve_next(uuid: str):
     audio_path = f"static/response_{uuid}.mp3"
@@ -118,7 +107,6 @@ def serve_next(uuid: str):
         }])
     return JSONResponse(content={"error": "Response audio not ready."}, status_code=404)
 
-# Streams audio for Vonage (final endpoint for .mp3)
 @app.get("/webhooks/next-audio")
 def stream_mp3(uuid: str):
     path = f"static/response_{uuid}.mp3"
@@ -126,7 +114,6 @@ def stream_mp3(uuid: str):
         return FileResponse(path, media_type="audio/mpeg")
     return {"error": "File not found"}
 
-# API for triggering outbound call
 class CallRequest(BaseModel):
     to_number: str
 
