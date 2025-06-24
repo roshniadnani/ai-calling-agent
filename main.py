@@ -1,79 +1,89 @@
 import os
-import subprocess
-import sys
+import uuid
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
-from pydantic import BaseModel
-
-# Ensure vonage is installed
-try:
-    import vonage
-except ImportError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "vonage==2.6.3"])
-    import vonage
-
-# Your helper modules
 from gpt_elevenlabs import generate_voice
-from google_sheets import append_row_to_sheet
-from call_vonage import make_call
+from vonage import Voice
+import json
 
 load_dotenv()
 
 app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
+voice = Voice(key=os.getenv("VONAGE_API_KEY"), secret=os.getenv("VONAGE_API_SECRET"))
+VONAGE_NUMBER = os.getenv("VONAGE_NUMBER")
 RENDER_BASE_URL = os.getenv("RENDER_BASE_URL")
+VOICE_NAME = os.getenv("VOICE_NAME", "Rachel")
+
 session_state = {}
-questions = [
-    # ... your question list as before
-]
 
-def build_ncco_stream(uuid: str):
-    return [{"action": "stream", "streamUrl": [f"{RENDER_BASE_URL}/webhooks/next-audio?uuid={uuid}"]},
-            {"action": "input", "eventUrl": [f"{RENDER_BASE_URL}/webhooks/event"], "timeout": 10, "bargeIn": True}]
+@app.post("/call")
+async def trigger_outbound_call(request: Request):
+    data = await request.json()
+    to_number = data.get("to")
+    print(f"📞 /call received for: {to_number}")
 
-@app.post("/webhooks/answer")
-def answer_call(request: Request):
-    greeting = questions[0]
-    generate_voice(greeting, output_path=f"static/response_temp.mp3")
-    return JSONResponse(build_ncco_stream("temp"))
+    ncco_url = f"{RENDER_BASE_URL}/webhooks/answer"
+
+    response = voice.create_call({
+        "to": [{"type": "phone", "number": to_number}],
+        "from": {"type": "phone", "number": VONAGE_NUMBER},
+        "answer_url": [ncco_url],
+        "event_url": [f"{RENDER_BASE_URL}/webhooks/event"]
+    })
+
+    print(f"✅ Call successfully initiated.")
+    return JSONResponse(content=response)
+
+@app.get("/webhooks/answer")
+async def answer_call(request: Request):
+    caller_uuid = str(uuid.uuid4())
+    session_state[caller_uuid] = {"idx": 0, "answers": []}
+
+    public_url = f"{RENDER_BASE_URL}/static/desiree_response.mp3"
+    ncco = [
+        {"action": "stream", "streamUrl": [public_url]},
+        {
+            "action": "input",
+            "eventUrl": [f"{RENDER_BASE_URL}/webhooks/event"],
+            "speech": {"language": "en-US", "endOnSilence": 1, "maxDuration": 5},
+            "dtmf": {"maxDigits": 1, "timeOut": 5}
+        }
+    ]
+    return JSONResponse(content=ncco)
 
 @app.post("/webhooks/event")
 async def handle_event(request: Request):
-    payload = await request.json()
-    uuid = payload.get("uuid")
-    user_input = (payload.get("speech") or {}).get("text") or \
-                 (payload.get("dtmf") or {}).get("digits") or ""
+    data = await request.json()
+    print("🔁 Webhook event received")
+    print(f"Headers: {request.headers}")
+    print(f"🔹 Body: {json.dumps(data)}")
 
-    state = session_state.setdefault(uuid, {"step": 0, "answers": []})
-    state["answers"].append(user_input)
-    step = state["step"] + 1
+    uuid = data.get("uuid")
+    if not uuid:
+        return JSONResponse(status_code=200, content={"message": "No UUID"})
 
-    if step >= len(questions):
-        append_row_to_sheet(state["answers"])
-        farewell = "Thank you! A rep will call you shortly. Goodbye!"
-        generate_voice(farewell, f"static/response_{uuid}.mp3")
-        session_state.pop(uuid, None)
-        return JSONResponse([{"action": "stream", "streamUrl": [f"{RENDER_BASE_URL}/webhooks/next-audio?uuid={uuid}"]}])
-    else:
-        next_q = questions[step]
-        generate_voice(next_q, f"static/response_{uuid}.mp3")
-        session_state[uuid]["step"] = step
-        return JSONResponse(build_ncco_stream(uuid))
+    state = session_state.get(uuid)
+    if not state:
+        state = session_state.setdefault(uuid, {"idx": 0, "answers": []})
 
-@app.get("/webhooks/next-audio")
-def next_audio(uuid: str):
-    path = f"static/response_{uuid}.mp3"
-    if os.path.exists(path):
-        return FileResponse(path, media_type="audio/mpeg")
-    return JSONResponse({"error": "File not ready"}, status_code=404)
+    # Simulate next message
+    next_text = "Thank you for your response. We'll be in touch."
+    file_path = f"static/response_{uuid}.mp3"
+    generate_voice(next_text, file_path)
 
-class CallRequest(BaseModel):
-    to_number: str
+    public_url = f"{RENDER_BASE_URL}/{file_path}"
+    ncco = [
+        {"action": "stream", "streamUrl": [public_url]},
+        {
+            "action": "input",
+            "eventUrl": [f"{RENDER_BASE_URL}/webhooks/event"],
+            "speech": {"language": "en-US", "endOnSilence": 1, "maxDuration": 5},
+            "dtmf": {"maxDigits": 1, "timeOut": 5}
+        }
+    ]
+    return JSONResponse(content=ncco)
 
-@app.post("/call")
-def outbound(request: CallRequest):
-    ok = make_call(request.to_number)
-    return {"status": "ok" if ok else "error"}
+@app.get("/")
+async def root():
+    return {"message": "AI Calling Agent is Live"}
