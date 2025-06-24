@@ -1,102 +1,120 @@
 import os
-import json
-import requests
+import subprocess
+import sys
 from fastapi import FastAPI, Request
-from pydantic import BaseModel
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
-from gpt_elevenlabs import generate_voice
+from pydantic import BaseModel
 
-app = FastAPI()
+# Emergency install for Vonage
+try:
+    import vonage
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "vonage==2.6.3"])
+    import vonage
+
+from gpt_elevenlabs import generate_voice
+from google_sheets import append_row_to_sheet
+from call_vonage import make_call
+
 load_dotenv()
 
-VONAGE_API_KEY = os.getenv("VONAGE_API_KEY")
-VONAGE_API_SECRET = os.getenv("VONAGE_API_SECRET")
-VONAGE_APPLICATION_ID = os.getenv("VONAGE_APPLICATION_ID")
-VONAGE_PRIVATE_KEY_PATH = os.getenv("VONAGE_PRIVATE_KEY_PATH")
-VONAGE_NUMBER = os.getenv("VONAGE_NUMBER")
-BASE_URL = os.getenv("BASE_URL")  # e.g., https://ai-calling-agent-xxxx.onrender.com
+# Generate opening greeting once on startup
+generate_voice(
+    "Hi, this is Desiree from Millennium Information Services. I’ll be conducting a quick home interview for insurance purposes. Is now a good time to talk?",
+    "static/desiree_response.mp3"
+)
 
+app = FastAPI()
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+RENDER_BASE_URL = os.getenv("RENDER_BASE_URL")
 session_state = {}
+
+questions = [
+    "Can I confirm your full name?",
+    "What is your full street address, including city and ZIP code?",
+    "What is your date of birth?",
+    "Can I get a phone number for follow-up?",
+    "Do you have an email address we can use for your policy information?",
+    "What type of insurance policy are you applying for?",
+    "What level of coverage are you interested in?",
+    "Do you currently have insurance on your property?",
+    "Is the property occupied full-time or part-time?",
+    "How many people currently reside in the home?",
+    "What year was the home built?",
+    "What is the home’s approximate square footage?",
+    "Are there any known damages or renovations ongoing?",
+    "Would you like to book an appointment to speak with an agent?",
+    "What time works best for your appointment?",
+]
+
+@app.get("/")
+def home():
+    return {"message": "AI Calling Agent Live"}
+
+@app.get("/webhooks/answer")
+def answer_call():
+    public_url = f"{RENDER_BASE_URL}/static/desiree_response.mp3"
+    ncco = [{"action": "stream", "streamUrl": [public_url]}]
+    return JSONResponse(content=ncco)
+
+@app.post("/webhooks/event")
+async def handle_event(request: Request):
+    data = await request.json()
+
+    # Safe uuid handling
+    uuid = data.get("uuid") or data.get("conversation_uuid") or "default"
+
+    # Safe session state
+    global session_state
+    if not isinstance(session_state, dict):
+        session_state = {}
+    state = session_state.setdefault(uuid, {"idx": 0, "answers": []})
+
+    # Capture user input
+    speech = data.get("speech", {}).get("text")
+    dtmf = data.get("dtmf", {}).get("digits")
+    user_input = speech or dtmf or "..."
+
+    state["answers"].append(user_input)
+    state["idx"] += 1
+
+    audio_path = f"static/response_{uuid}.mp3"
+
+    if state["idx"] >= len(questions):
+        append_row_to_sheet(state["answers"])
+        generate_voice("Thank you! Your answers have been recorded. A representative will follow up with you soon.", audio_path)
+        session_state.pop(uuid, None)
+    else:
+        next_q = questions[state["idx"]]
+        generate_voice(next_q, audio_path)
+
+    return {"status": "ok"}
+
+@app.get("/webhooks/next")
+def serve_next(uuid: str):
+    audio_path = f"static/response_{uuid}.mp3"
+    if os.path.exists(audio_path):
+        return JSONResponse(content=[{
+            "action": "stream",
+            "streamUrl": [f"{RENDER_BASE_URL}/webhooks/next-audio?uuid={uuid}"]
+        }])
+    return JSONResponse(content={"error": "Audio not ready"}, status_code=404)
+
+@app.get("/webhooks/next-audio")
+def stream_audio(uuid: str):
+    path = f"static/response_{uuid}.mp3"
+    if os.path.exists(path):
+        return FileResponse(path, media_type="audio/mpeg")
+    return JSONResponse(content={"error": "File not found"}, status_code=404)
 
 class CallRequest(BaseModel):
     to_number: str
 
 @app.post("/call")
 def trigger_outbound_call(request: CallRequest):
-    print("📞 /call received for:", request.to_number)
-    jwt = generate_jwt()
-    print("🔐 JWT generated.")
-    url = "https://api-us-3.vonage.com/v1/calls"
-    headers = {
-        "Authorization": f"Bearer {jwt}",
-        "Content-Type": "application/json"
-    }
-    body = {
-        "to": [{"type": "phone", "number": request.to_number}],
-        "from": {"type": "phone", "number": VONAGE_NUMBER},
-        "ncco": [
-            {"action": "talk", "text": "Hi, this is Desiree. Can we talk for a minute?"},
-            {"action": "input", "eventUrl": [f"{BASE_URL}/webhooks/event"]}
-        ]
-    }
-    response = requests.post(url, headers=headers, json=body)
-    print("📤 Vonage response:", response.status_code, response.text)
-    return {"status": response.status_code, "details": response.json()}
-
-@app.post("/webhooks/event")
-async def handle_event(request: Request):
-    data = await request.json()
-    print("📩 Webhook event:", data)
-
-    uuid = data.get("uuid") or data.get("conversation_uuid")
-    if not uuid:
-        return {"error": "Missing uuid"}
-
-    state = session_state.setdefault(uuid, {"idx": 0, "answers": []})
-
-    if data.get("speech"):
-        text = data["speech"].get("results", [{}])[0].get("text", "")
-        state["answers"].append(text)
-        print("🗣️ User said:", text)
-
-    prompts = ["How are you feeling today?", "Do you want to hear some news?", "Would you like to talk again later?"]
-    idx = state["idx"]
-
-    if idx < len(prompts):
-        reply = prompts[idx]
-        state["idx"] += 1
-    else:
-        reply = "It was great talking. Goodbye!"
-
-    filename = f"static/reply_{uuid}.mp3"
-    generate_voice(reply, filename)
-
-    return {
-        "action": "play",
-        "streamUrl": [f"{BASE_URL}/{filename}"]
-    }
-
-@app.get("/webhooks/answer")
-def handle_answer(request: Request):
-    return {
-        "ncco": [
-            {"action": "talk", "text": "Hi, this is Desiree."},
-            {"action": "input", "eventUrl": [f"{BASE_URL}/webhooks/event"]}
-        ]
-    }
-
-def generate_jwt():
-    import jwt
-    from time import time
-
-    with open(VONAGE_PRIVATE_KEY_PATH, "r") as f:
-        private_key = f.read()
-
-    payload = {
-        "application_id": VONAGE_APPLICATION_ID,
-        "iat": int(time()),
-        "exp": int(time()) + 60,
-        "jti": os.urandom(8).hex()
-    }
-
-    return jwt.encode(payload, private_key, algorithm="RS256")
+    print(f"📞 /call received for: {request.to_number}")
+    success = make_call(request.to_number)
+    return {"status": "ok" if success else "error"}
