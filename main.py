@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from elevenlabs import generate, save, set_api_key
 from dotenv import load_dotenv
 from vonage import Voice
@@ -7,8 +8,18 @@ import os, uuid
 
 # Load environment variables
 load_dotenv()
+
 app = FastAPI()
 
+# Mount static directory for serving audio files
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Root health check
+@app.get("/")
+def root():
+    return {"message": "🚀 AI Calling Agent is live!"}
+
+# Config
 APPLICATION_ID = os.getenv("VONAGE_APPLICATION_ID")
 PRIVATE_KEY_PATH = os.getenv("VONAGE_PRIVATE_KEY_PATH")
 VIRTUAL_NUMBER = os.getenv("VONAGE_VIRTUAL_NUMBER")
@@ -16,11 +27,11 @@ RENDER_BASE_URL = os.getenv("RENDER_BASE_URL")
 ELEVEN_API_KEY = os.getenv("ELEVEN_API_KEY")
 DESIREE_VOICE_ID = os.getenv("DESIREE_VOICE_ID")
 
-# Load Vonage private key
+# Load Vonage private key from file
 with open(PRIVATE_KEY_PATH, "r") as f:
     private_key = f.read()
 
-# Init APIs
+# Initialize APIs
 voice = Voice(application_id=APPLICATION_ID, private_key=private_key)
 set_api_key(ELEVEN_API_KEY)
 
@@ -49,9 +60,10 @@ async def answer():
         "Great! First, can you confirm your full name and date of birth?"
     )
     filename = f"audio_{uuid.uuid4().hex}.mp3"
+    filepath = f"static/{filename}"
     audio = generate(text=script, voice=DESIREE_VOICE_ID, model="eleven_monolingual_v1")
-    save(audio, filename)
-    return JSONResponse([
+    save(audio, filepath)
+    return [
         {
             "action": "stream",
             "streamUrl": [f"{RENDER_BASE_URL}/static/{filename}"]
@@ -61,10 +73,10 @@ async def answer():
             "eventUrl": [f"{RENDER_BASE_URL}/event"],
             "speech": {"language": "en-US", "endOnSilence": 1, "maxDuration": 5}
         }
-    ])
+    ]
 
 @app.post("/event")
 async def event_handler(request: Request):
     data = await request.json()
     print("📞 Call Event:", data)
-    return JSONResponse({"status": "received"})
+    return {"status": "received"}
