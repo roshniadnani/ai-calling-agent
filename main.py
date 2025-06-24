@@ -1,30 +1,28 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from elevenlabs import generate, save, set_api_key
-import os
-import uuid
-from vonage import Voice
 from dotenv import load_dotenv
-
-load_dotenv()
-
-app = FastAPI()
+from vonage import Voice
+import os, uuid
 
 # Load environment variables
+load_dotenv()
+app = FastAPI()
+
 APPLICATION_ID = os.getenv("VONAGE_APPLICATION_ID")
+PRIVATE_KEY_PATH = os.getenv("VONAGE_PRIVATE_KEY_PATH")
 VIRTUAL_NUMBER = os.getenv("VONAGE_VIRTUAL_NUMBER")
 RENDER_BASE_URL = os.getenv("RENDER_BASE_URL")
 ELEVEN_API_KEY = os.getenv("ELEVEN_API_KEY")
 DESIREE_VOICE_ID = os.getenv("DESIREE_VOICE_ID")
 
-# ✅ Use raw private key from environment (no file path)
-private_key = os.getenv("VONAGE_PRIVATE_KEY")
+# Load Vonage private key
+with open(PRIVATE_KEY_PATH, "r") as f:
+    private_key = f.read()
 
-# Setup ElevenLabs
-set_api_key(ELEVEN_API_KEY)
-
-# Initialize Vonage Voice API
+# Init APIs
 voice = Voice(application_id=APPLICATION_ID, private_key=private_key)
+set_api_key(ELEVEN_API_KEY)
 
 @app.post("/call")
 async def call_user(request: Request):
@@ -32,7 +30,6 @@ async def call_user(request: Request):
     to_number = data.get("to")
     if not to_number:
         return JSONResponse({"error": "Missing 'to' number"}, status_code=400)
-
     try:
         response = voice.create_call({
             "to": [{"type": "phone", "number": to_number}],
@@ -46,23 +43,28 @@ async def call_user(request: Request):
 
 @app.post("/answer")
 async def answer():
-    script_text = (
-        "Hi! This is Desiree, your insurance advisor. I'm calling to walk you through a quick quote. "
-        "It will only take a minute. May I begin? "
+    script = (
+        "Hi! This is Desiree, your insurance advisor. "
+        "I'm calling to walk you through a quick quote. May I begin? "
         "Great! First, can you confirm your full name and date of birth?"
     )
     filename = f"audio_{uuid.uuid4().hex}.mp3"
-    audio = generate(text=script_text, voice=DESIREE_VOICE_ID, model="eleven_monolingual_v1")
+    audio = generate(text=script, voice=DESIREE_VOICE_ID, model="eleven_monolingual_v1")
     save(audio, filename)
     return JSONResponse([
         {
             "action": "stream",
             "streamUrl": [f"{RENDER_BASE_URL}/static/{filename}"]
+        },
+        {
+            "action": "input",
+            "eventUrl": [f"{RENDER_BASE_URL}/event"],
+            "speech": {"language": "en-US", "endOnSilence": 1, "maxDuration": 5}
         }
     ])
 
 @app.post("/event")
 async def event_handler(request: Request):
     data = await request.json()
-    print("📞 Call event received:", data)
+    print("📞 Call Event:", data)
     return JSONResponse({"status": "received"})
