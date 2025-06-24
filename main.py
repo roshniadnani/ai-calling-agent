@@ -1,47 +1,72 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-import vonage
+from elevenlabs import generate, save, set_api_key
 import os
+import uuid
+from vonage import Voice
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI()
 
-# Load credentials
-VONAGE_APPLICATION_ID = os.getenv("VONAGE_APPLICATION_ID")
-PRIVATE_KEY_PATH = "private.key"  # Ensure this file exists and is formatted correctly
+# Load environment variables
+APPLICATION_ID = os.getenv("VONAGE_APPLICATION_ID")
+PRIVATE_KEY_PATH = os.getenv("VONAGE_PRIVATE_KEY_PATH")
+VIRTUAL_NUMBER = os.getenv("VONAGE_VIRTUAL_NUMBER")
+RENDER_BASE_URL = os.getenv("RENDER_BASE_URL")
+ELEVEN_API_KEY = os.getenv("ELEVEN_API_KEY")
+DESIREE_VOICE_ID = os.getenv("DESIREE_VOICE_ID")
 
-# Create Vonage client using PEM-formatted private key
-client = vonage.Client(
-    application_id=VONAGE_APPLICATION_ID,
-    private_key=open(PRIVATE_KEY_PATH, "r").read()
-)
-voice = vonage.Voice(client)
+# Setup ElevenLabs
+set_api_key(ELEVEN_API_KEY)
 
-@app.get("/")
-async def root():
-    return {"message": "Your service is live 🎉"}
+# Load Vonage credentials
+with open(PRIVATE_KEY_PATH, "r") as f:
+    private_key = f.read()
+
+voice = Voice(application_id=APPLICATION_ID, private_key=private_key)
+
 
 @app.post("/call")
-async def trigger_outbound_call(request: Request):
+async def call_user(request: Request):
+    data = await request.json()
+    to_number = data.get("to")
+    if not to_number:
+        return JSONResponse({"error": "Missing 'to' number"}, status_code=400)
+
     try:
-        body = await request.json()
-        to_number = body.get("to")
-        if not to_number:
-            return JSONResponse(status_code=400, content={"error": "Missing 'to' number"})
-
-        print(f"📞 Initiating outbound call to: {to_number}")
-
         response = voice.create_call({
             "to": [{"type": "phone", "number": to_number}],
-            "from": {"type": "phone", "number": os.getenv("VONAGE_NUMBER")},
-            "ncco": [{
-                "action": "talk",
-                "text": "Hello! This is a test call from your AI calling agent."
-            }]
+            "from": {"type": "phone", "number": VIRTUAL_NUMBER},
+            "answer_url": [f"{RENDER_BASE_URL}/answer"],
+            "event_url": [f"{RENDER_BASE_URL}/event"]
         })
-
-        print("🔹 Vonage Response:", response)
-        return response
-
+        return {"message": "Call initiated", "response": response}
     except Exception as e:
-        print("❌ Error during outbound call:", str(e))
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/answer")
+async def answer():
+    script_text = (
+        "Hi! This is Desiree, your insurance advisor. I'm calling to walk you through a quick quote. "
+        "It will only take a minute. May I begin? "
+        "Great! First, can you confirm your full name and date of birth?"
+    )
+    filename = f"audio_{uuid.uuid4().hex}.mp3"
+    audio = generate(text=script_text, voice=DESIREE_VOICE_ID, model="eleven_monolingual_v1")
+    save(audio, filename)
+    return JSONResponse([
+        {
+            "action": "stream",
+            "streamUrl": [f"{RENDER_BASE_URL}/static/{filename}"]
+        }
+    ])
+
+
+@app.post("/event")
+async def event_handler(request: Request):
+    data = await request.json()
+    print("📞 Call event received:", data)
+    return JSONResponse({"status": "received"})
