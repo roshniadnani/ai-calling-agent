@@ -1,19 +1,18 @@
-import requests
+from vonage import Voice
+import os
+from dotenv import load_dotenv
 
-# Define the URL of your deployed app
-url = "https://ai-calling-agent-9hv2.onrender.com/call"
+load_dotenv()
 
-# The phone number you're calling (MUST be whitelisted in Vonage test list)
-data = {
-    "to": "+13104211169"  # Replace this if needed
-}
+voice = Voice(
+    application_id=os.getenv("VONAGE_APPLICATION_ID"),
+    private_key=os.getenv("VONAGE_PRIVATE_KEY")
+)
 
-headers = {
-    "Content-Type": "application/json"
-}
-
-response = requests.post(url, json=data, headers=headers)
-
-print("📞 Initiating outbound call to:", data["to"])
-print("🔹 Status:", response.status_code)
-print("🔹 Response:", response.text)
+response = voice.create_call({
+    "to": [{"type": "phone", "number": "+13104211169"}],
+    "from": {"type": "phone", "number": os.getenv("VONAGE_VIRTUAL_NUMBER")},
+    "answer_url": [f"{os.getenv('RENDER_BASE_URL')}/answer"],
+    "event_url": [f"{os.getenv('RENDER_BASE_URL')}/event"]
+})
+print(response)

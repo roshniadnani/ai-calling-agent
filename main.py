@@ -12,21 +12,19 @@ app = FastAPI()
 
 # Load environment variables
 APPLICATION_ID = os.getenv("VONAGE_APPLICATION_ID")
-PRIVATE_KEY_PATH = os.getenv("VONAGE_PRIVATE_KEY_PATH")
 VIRTUAL_NUMBER = os.getenv("VONAGE_VIRTUAL_NUMBER")
 RENDER_BASE_URL = os.getenv("RENDER_BASE_URL")
 ELEVEN_API_KEY = os.getenv("ELEVEN_API_KEY")
 DESIREE_VOICE_ID = os.getenv("DESIREE_VOICE_ID")
 
+# ✅ Use raw private key from environment (no file path)
+private_key = os.getenv("VONAGE_PRIVATE_KEY")
+
 # Setup ElevenLabs
 set_api_key(ELEVEN_API_KEY)
 
-# Load Vonage credentials
-with open(PRIVATE_KEY_PATH, "r") as f:
-    private_key = f.read()
-
+# Initialize Vonage Voice API
 voice = Voice(application_id=APPLICATION_ID, private_key=private_key)
-
 
 @app.post("/call")
 async def call_user(request: Request):
@@ -46,7 +44,6 @@ async def call_user(request: Request):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
-
 @app.post("/answer")
 async def answer():
     script_text = (
@@ -63,7 +60,6 @@ async def answer():
             "streamUrl": [f"{RENDER_BASE_URL}/static/{filename}"]
         }
     ])
-
 
 @app.post("/event")
 async def event_handler(request: Request):
