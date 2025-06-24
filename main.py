@@ -1,88 +1,47 @@
-import os
-import uuid
-import json
-import vonage
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from dotenv import load_dotenv
-from gpt_elevenlabs import generate_voice
-
-load_dotenv()
-
-# Initialize Vonage client correctly
-client = vonage.Client(key=os.getenv("VONAGE_API_KEY"), secret=os.getenv("VONAGE_API_SECRET"))
-voice = vonage.Voice(client)
-
-VONAGE_NUMBER = os.getenv("VONAGE_VIRTUAL_NUMBER")
-RENDER_BASE_URL = os.getenv("RENDER_BASE_URL")
+import vonage
+import os
 
 app = FastAPI()
-session_state = {}
 
-@app.post("/call")
-async def trigger_outbound_call(request: Request):
-    data = await request.json()
-    to_number = data.get("to")
-    print(f"📞 /call received for: {to_number}")
+# Load credentials
+VONAGE_APPLICATION_ID = os.getenv("VONAGE_APPLICATION_ID")
+PRIVATE_KEY_PATH = "private.key"  # Ensure this file exists and is formatted correctly
 
-    response = voice.create_call({
-        "to": [{"type": "phone", "number": to_number}],
-        "from": {"type": "phone", "number": VONAGE_NUMBER},
-        "answer_url": [f"{RENDER_BASE_URL}/webhooks/answer"],
-        "event_url": [f"{RENDER_BASE_URL}/webhooks/event"]
-    })
-
-    print("✅ Call successfully initiated.")
-    return JSONResponse(content=response)
-
-@app.get("/webhooks/answer")
-async def answer_call(request: Request):
-    caller_uuid = str(uuid.uuid4())
-    session_state[caller_uuid] = {"idx": 0, "answers": []}
-
-    public_url = f"{RENDER_BASE_URL}/static/desiree_response.mp3"
-    ncco = [
-        {"action": "stream", "streamUrl": [public_url]},
-        {
-            "action": "input",
-            "eventUrl": [f"{RENDER_BASE_URL}/webhooks/event"],
-            "speech": {"language": "en-US", "endOnSilence": 1, "maxDuration": 5},
-            "dtmf": {"maxDigits": 1, "timeOut": 5}
-        }
-    ]
-    return JSONResponse(content=ncco)
-
-@app.post("/webhooks/event")
-async def handle_event(request: Request):
-    data = await request.json()
-    print("🔁 Webhook event received")
-    print(f"Headers: {request.headers}")
-    print(f"🔹 Body: {json.dumps(data)}")
-
-    uuid = data.get("uuid")
-    if not uuid:
-        return JSONResponse(status_code=200, content={"message": "No UUID"})
-
-    state = session_state.get(uuid)
-    if not state:
-        state = session_state.setdefault(uuid, {"idx": 0, "answers": []})
-
-    next_text = "Thank you for your response. We'll be in touch."
-    file_path = f"static/response_{uuid}.mp3"
-    generate_voice(next_text, file_path)
-
-    public_url = f"{RENDER_BASE_URL}/{file_path}"
-    ncco = [
-        {"action": "stream", "streamUrl": [public_url]},
-        {
-            "action": "input",
-            "eventUrl": [f"{RENDER_BASE_URL}/webhooks/event"],
-            "speech": {"language": "en-US", "endOnSilence": 1, "maxDuration": 5},
-            "dtmf": {"maxDigits": 1, "timeOut": 5}
-        }
-    ]
-    return JSONResponse(content=ncco)
+# Create Vonage client using PEM-formatted private key
+client = vonage.Client(
+    application_id=VONAGE_APPLICATION_ID,
+    private_key=open(PRIVATE_KEY_PATH, "r").read()
+)
+voice = vonage.Voice(client)
 
 @app.get("/")
 async def root():
-    return {"message": "AI Calling Agent is Live"}
+    return {"message": "Your service is live 🎉"}
+
+@app.post("/call")
+async def trigger_outbound_call(request: Request):
+    try:
+        body = await request.json()
+        to_number = body.get("to")
+        if not to_number:
+            return JSONResponse(status_code=400, content={"error": "Missing 'to' number"})
+
+        print(f"📞 Initiating outbound call to: {to_number}")
+
+        response = voice.create_call({
+            "to": [{"type": "phone", "number": to_number}],
+            "from": {"type": "phone", "number": os.getenv("VONAGE_NUMBER")},
+            "ncco": [{
+                "action": "talk",
+                "text": "Hello! This is a test call from your AI calling agent."
+            }]
+        })
+
+        print("🔹 Vonage Response:", response)
+        return response
+
+    except Exception as e:
+        print("❌ Error during outbound call:", str(e))
+        return JSONResponse(status_code=500, content={"error": str(e)})
